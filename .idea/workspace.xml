@@ -26,8 +26,8 @@
       <file leaf-file-name="git-module.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/git-module.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="473">
-              <caret line="251" column="4" selection-start-line="251" selection-start-column="4" selection-end-line="251" selection-end-column="4" />
+            <state relative-caret-position="552">
+              <caret line="273" column="27" selection-start-line="273" selection-start-column="21" selection-end-line="273" selection-end-column="27" />
               <folding />
             </state>
           </provider>
@@ -288,8 +288,8 @@
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/git-module.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="473">
-          <caret line="251" column="4" selection-start-line="251" selection-start-column="4" selection-end-line="251" selection-end-column="4" />
+        <state relative-caret-position="552">
+          <caret line="273" column="27" selection-start-line="273" selection-start-column="21" selection-end-line="273" selection-end-column="27" />
           <folding />
         </state>
       </provider>

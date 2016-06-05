@@ -94,13 +94,6 @@ def git_squash_all_commits(version):
     execute('git reset %s' % commit_sha)
 
 
-def git_commit_amend(mesagge=None):
-    if mesagge is None:
-        execute('git commit --amend --no-edit')
-    else:
-        execute('git commit --amend -m "%s"' % mesagge)
-
-
 def git_tag(tag_name):
     if git_check_tag(tag_name) is True:
         raise GitError('Aborted: tag already exists')
@@ -120,11 +113,8 @@ def git_check_tag(tag_name):
     return False
 
 
-def git_delete_local_tag(tag_name):
+def git_delete_tag(tag_name):
     execute('git tag -d %s' % tag_name)
-
-
-def git_delete_remote_tag(tag_name):
     execute('git push --delete origin %s' % tag_name)
 
 
@@ -193,7 +183,7 @@ def git_new_junk(branch_name):
 def git_dev_test():
     current_branch = git_current_branch()
     if current_branch in MAIN_BRANCHES or JUNK in current_branch:
-        raise GitError('Develop test isn\'t allowed on main branches')
+        raise GitError('Develop test isn\'t allowed on main branches or junk')
 
     if git_dev_test_in_progress() is not True:
         raise GitError('Testing in progress')
@@ -203,7 +193,9 @@ def git_dev_test():
 
     starting_tag = '%s/started' % current_branch
     testing_tag = '%s/testing' % current_branch
-    patch_name = '%s.patch' % testing_tag
+    branch = list(current_branch)
+    branch[branch.index('/')] = '_'
+    patch_name = '%s_test_%d.patch' % (''.join(branch), test_num)
 
     git_tag(testing_tag)
     git_make_patch(starting_tag, testing_tag)
@@ -215,8 +207,12 @@ def git_dev_test():
 
 def git_dev_test_in_progress():
     git_checkout(DEVELOP)
-    last_commit_msg = execute('git log -1 --pretty=%B', RETURN_RESPONSE)
+    last_commit_msg = git_last_commit_msg()
     return check_end_keywords(last_commit_msg)
+
+
+def git_last_commit_msg():
+    return execute('git log -1 --pretty=%B', RETURN_RESPONSE)
 
 
 def git_test_number(branch_name):
@@ -249,7 +245,37 @@ def git_apply_patch(patch_name, branch_name):
 
 
 def git_prolong():
-    
+    current_branch = git_current_branch()
+    if current_branch in MAIN_BRANCHES or JUNK in current_branch:
+        raise GitError('Command prolong isn\'t allowed on main branches or junk')
+
+    tag_testing = '%s/testing' % current_branch
+    tag_finished = '%s/finished' % current_branch
+    tag_released = '%s/released' % current_branch
+
+    if git_check_tag(tag_released) is True:
+        raise GitError('Branch is released, can\'t prolong')
+
+    if git_check_tag(tag_finished):
+        git_delete_tag(tag_finished)
+        return
+
+    if git_check_tag(tag_testing):
+        git_delete_tag(tag_testing)
+        if git_dev_test_in_progress() is not True:
+            raise GitError('Tag %s/testing is deleted, but there wasn\'t any test on DEVELOP')
+
+        git_end_dev_test('failed')
+        return
+
+    raise GitError('Branch is already active')
+
+
+def git_end_dev_test(reason):
+    git_checkout(DEVELOP)
+    git_revert_commit('--no-commit')
+    git_commit('%s/%s' % (git_last_commit_msg(), reason))
+    return
 
 
 def git_add_all():
@@ -262,6 +288,17 @@ def git_reset(file_name):
 
 def git_commit(mesagge):
     execute('git commit -m ' + mesagge)
+
+
+def git_commit_amend(mesagge=None):
+    if mesagge is None:
+        execute('git commit --amend --no-edit')
+    else:
+        execute('git commit --amend -m "%s"' % mesagge)
+
+
+def git_revert_commit(no_commit=''):
+    execute('git revert head %s' % no_commit)
 
 
 def git_delete_file(file_name):
