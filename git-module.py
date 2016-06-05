@@ -52,6 +52,8 @@ def git_initialization(master, version):
         if git_repository_prepared(master) is not True:
             return 'Aborted: repository contains branches other than master'
 
+        execute('git config --global push.followTags=True')
+
         for branch in MAIN_BRANCHES:
             git_new_branch(branch, master)
             git_checkout(branch)
@@ -62,7 +64,7 @@ def git_initialization(master, version):
             git_commit_amend()
 
             if branch in [RELEASE, STABLE, HISTORY]:
-                git_tag('%s/%s' % (branch, version))
+                git_add_tag('%s/%s' % (branch, version))
 
             git_push_origin(branch)
 
@@ -94,10 +96,11 @@ def git_squash_all_commits(version):
     execute('git reset %s' % commit_sha)
 
 
-def git_tag(tag_name):
+def git_add_tag(tag_name):
     if git_check_tag(tag_name) is True:
         raise GitError('Aborted: tag already exists')
     execute('git tag -a %s -m "%s"' % (tag_name, tag_name))
+    git_push_tag(tag_name)
 
 
 def git_push_tag(tag_name):
@@ -113,13 +116,13 @@ def git_check_tag(tag_name):
     return False
 
 
-def git_delete_tag(tag_name):
+def git_remove_tag(tag_name):
     execute('git tag -d %s' % tag_name)
     execute('git push --delete origin %s' % tag_name)
 
 
-def git_push_origin(branch_name):
-    execute('git push origin %s' % branch_name)
+def git_push_origin(branch_name, upstream=''):
+    execute('git push -f %s origin %s' % (upstream, branch_name))
 
 
 def git_current_branch():
@@ -135,7 +138,7 @@ def git_new_branch(branch_name, main_branch):
 
 
 def git_push_branch(branch_name):
-    execute('git push --set-upstream origin %s --follow-tags' % branch_name)
+    execute('git push --set-upstream origin %s' % branch_name)
 
 
 def git_delete_local_branch(branch_name):
@@ -156,7 +159,8 @@ def git_make_branch(branch_name, branch_type, main_branch=None):
         git_new_branch(branch_full_name, main_branch)
         git_checkout(branch_full_name)
         git_commit_amend()
-        git_tag('%s/started')
+        git_push_origin(branch_full_name, '-u')
+        git_add_tag('%s/started')
 
         return 'Successfully created %s branch' % branch_full_name
 
@@ -183,40 +187,44 @@ def git_new_junk(branch_name):
 def git_dev_test():
     current_branch = git_current_branch()
     if current_branch in MAIN_BRANCHES or JUNK in current_branch:
-        raise GitError('Develop test isn\'t allowed on main branches or junk')
+        raise GitError('Command dev-test isn\'t allowed on main branches')
 
-    if git_dev_test_in_progress() is not True:
+    test_can_progress = git_dev_test_can_progress()
+    if test_can_progress is not True and current_branch == HOTFIX:
+        git_checkout(DEVELOP)
+        branch_name = git_last_commit_msg().split('/test')[0]
+        git_checkout(branch_name)
+        git_prolong(True)
+
+    elif test_can_progress is not True:
         raise GitError('Testing in progress')
 
     test_num = git_test_number()
     git_checkout(current_branch)
 
-    starting_tag = '%s/started' % current_branch
-    testing_tag = '%s/testing' % current_branch
-    branch = list(current_branch)
-    branch[branch.index('/')] = '_'
-    patch_name = '%s_test_%d.patch' % (''.join(branch), test_num)
+    tag_started = '%s/started' % current_branch
+    tag_testing = '%s/testing' % current_branch
+    patch_name = format_patch_name(current_branch, 'test')
 
-    git_tag(testing_tag)
-    git_make_patch(starting_tag, testing_tag)
-    git_apply_patch(patch_name, STABLE)
+    git_add_tag(tag_testing)
+    git_make_patch(tag_started, tag_testing, patch_name)
+    git_checkout(STABLE)
+    git_apply_patch(patch_name)
     git_delete_file(patch_name)
     git_add_all()
     git_commit('%s/test#%d' % (current_branch, test_num))
+    git_push_origin(STABLE)
 
 
-def git_dev_test_in_progress():
+def git_dev_test_can_progress():
     git_checkout(DEVELOP)
     last_commit_msg = git_last_commit_msg()
     return check_end_keywords(last_commit_msg)
 
 
-def git_last_commit_msg():
-    return execute('git log -1 --pretty=%B', RETURN_RESPONSE)
-
-
 def git_test_number(branch_name):
-    test = execute("git log -1 --grep='%s/' --pretty=%B" % branch_name, RETURN_RESPONSE)
+    git_checkout(DEVELOP)
+    test = git_commit_grep(branch_name)
     if not test:
         return 1
 
@@ -227,45 +235,48 @@ def git_test_number(branch_name):
     return int(test_num)
 
 
-def check_end_keywords(commit_mesagge):
+def git_commit_grep(message):
+    return execute("git log -1 --grep='%s/' --pretty=%B" % message, RETURN_RESPONSE)
+
+
+def check_end_keywords(commit_message):
     for word in DEVELOP_END_KEYWORDS:
-        if word in commit_mesagge:
+        if word in commit_message:
             return True
     return False
 
 
-def git_make_patch(starting_tag, ending_tag):
-    execute('git diff --full-index --binary %s %s > %s.patch' % (starting_tag, ending_tag, ending_tag))
+def git_make_patch(starting_tag, ending_tag, patch_name):
+    execute('git diff --full-index --binary %s %s > %s' % (starting_tag, ending_tag, patch_name))
 
 
-def git_apply_patch(patch_name, branch_name):
+def git_apply_patch(patch_name):
     execute('git apply --check %s' % patch_name)
-    git_checkout(branch_name)
     execute('git apply -p1 < %s' % patch_name)
 
 
-def git_prolong():
+def git_prolong(force=False):
     current_branch = git_current_branch()
     if current_branch in MAIN_BRANCHES or JUNK in current_branch:
-        raise GitError('Command prolong isn\'t allowed on main branches or junk')
+        raise GitError('Command prolong isn\'t allowed on main branches')
 
     tag_testing = '%s/testing' % current_branch
     tag_finished = '%s/finished' % current_branch
     tag_released = '%s/released' % current_branch
 
     if git_check_tag(tag_released) is True:
-        raise GitError('Branch is released, can\'t prolong')
+        raise GitError('Branch is already released')
 
-    if git_check_tag(tag_finished):
-        git_delete_tag(tag_finished)
+    if git_check_tag(tag_finished) is True:
+        git_remove_tag(tag_finished)
         return
 
-    if git_check_tag(tag_testing):
-        git_delete_tag(tag_testing)
-        if git_dev_test_in_progress() is not True:
-            raise GitError('Tag %s/testing is deleted, but there wasn\'t any test on DEVELOP')
-
-        git_end_dev_test('failed')
+    if git_check_tag(tag_testing) is True:
+        git_remove_tag(tag_testing)
+        if force is True:
+            git_end_dev_test('forced_down')
+        else:
+            git_end_dev_test('failed')
         return
 
     raise GitError('Branch is already active')
@@ -273,36 +284,209 @@ def git_prolong():
 
 def git_end_dev_test(reason):
     git_checkout(DEVELOP)
-    git_revert_commit('--no-commit')
+    if git_dev_test_can_progress() is not True:
+        raise GitError('There is no tests on DEVELOP')
+
+    git_revert_commit()
     git_commit('%s/%s' % (git_last_commit_msg(), reason))
+    git_push_origin(DEVELOP)
     return
 
 
-def git_add_all():
-    execute('git add --all')
+def git_finish():
+    current_branch = git_current_branch()
+    if current_branch in MAIN_BRANCHES or JUNK in current_branch:
+        raise GitError('Command finish isn\'t allowed on main branches')
+
+    tag_testing = '%s/testing' % current_branch
+    tag_finished = '%s/finished' % current_branch
+    tag_released = '%s/released' % current_branch
+
+    if git_check_tag(tag_released) is True:
+        raise GitError('Branch is already released')
+
+    if git_check_tag(tag_finished) is True:
+        raise GitError('Branch is already finished')
+
+    if git_check_tag(tag_testing) is True:
+        git_remove_tag(tag_testing)
+        git_end_dev_test('success')
+
+    git_checkout(current_branch)
+    git_add_tag(tag_finished)
+
+
+def git_release():
+    current_branch = git_current_branch()
+    if current_branch in MAIN_BRANCHES or JUNK in current_branch:
+        raise GitError('Command release isn\'t allowed on main branches')
+
+    tag_started = '%s/started' % current_branch
+    tag_finished = '%s/finished' % current_branch
+    tag_released = '%s/released' % current_branch
+    tag_waiting_for_approval = 'waiting_for_approval'
+    tag_waiting_for_overall_approval = 'waiting_for_overall_approval'
+
+    if git_check_tag(tag_released) is True:
+        raise GitError('Branch is already released')
+
+    if git_check_tag(tag_finished) is not True:
+        raise GitError('Branch is not finished')
+
+    if git_check_tag(tag_waiting_for_approval) is True:
+        raise GitError('RELEASE branch is waiting for approval')
+
+    if git_check_tag(tag_waiting_for_overall_approval) is True:
+        raise GitError('RELEASE branch is waiting for overall approval')
+
+    patch_name = format_patch_name(current_branch, 'release')
+
+    git_add_tag(tag_finished)
+    git_make_patch(tag_started, tag_finished, patch_name)
+    git_checkout(RELEASE)
+    git_apply_patch(patch_name)
+    git_delete_file(patch_name)
+    git_add_all()
+    git_commit('%s' % current_branch)
+    git_push_origin(RELEASE)
+    git_add_tag(tag_waiting_for_approval)
+
+
+def format_patch_name(branch_name, type_of_patch):
+    branch = list(branch_name)
+    branch[branch.index('/')] = '_'
+    return '%s_%s.patch' % (''.join(branch), type_of_patch)
+
+
+def git_approve():
+    if git_current_branch() != RELEASE:
+        raise GitError('Command approve is allowed only on RELEASE branch')
+
+    tag_waiting_for_approval = 'waiting_for_approval'
+    tag_waiting_for_overall_approval = 'waiting_for_overall_approval'
+
+    if git_check_tag(tag_waiting_for_approval) is True:
+        git_remove_tag(tag_waiting_for_approval)
+        return
+
+    if git_check_tag(tag_waiting_for_overall_approval) is True:
+        git_remove_tag(tag_waiting_for_overall_approval)
+        return
+
+    raise GitError('RELEASE branch is already approved')
+
+
+def git_redeem():
+    if git_current_branch() != RELEASE:
+        raise GitError('Command approve is allowed only on RELEASE branch')
+
+    tag_waiting_for_approval = 'waiting_for_approval'
+
+    if git_check_tag(tag_waiting_for_approval) is not True:
+        raise GitError('There is nothing to redeem on RELEASE branch')
+
+    branch_name = git_last_commit_msg()
+    tag_finished = '%s/finished' % branch_name
+    tag_released = '%s/released' % branch_name
+
+    if git_check_tag(tag_finished) is True:
+        git_remove_tag(tag_finished)
+
+    if git_check_tag(tag_released) is True:
+        git_remove_tag(tag_released)
+
+    git_remove_tag(tag_waiting_for_approval)
+    git_reset_hard()
+    git_push_origin(RELEASE)
+
+
+def git_remove(branch_name):
+    if git_current_branch() != RELEASE:
+        raise GitError('Command remove is allowed only on RELEASE branch')
+
+    if not git_commit_grep(branch_name):
+        raise GitError('There is no released feature, bugfix or hotfix named %s' % branch_name)
+
+    tag_waiting_for_approval = 'waiting_for_approval'
+    tag_waiting_for_overall_approval = 'waiting_for_overall_approval'
+
+    if git_check_tag(tag_waiting_for_approval) is True:
+        raise GitError('RELEASE branch is waiting for approval')
+
+    if git_check_tag(tag_waiting_for_overall_approval) is True:
+        raise GitError('RELEASE branch is waiting for overall approval')
+
+    tag_finished = '%s/finished' % branch_name
+    tag_released = '%s/released' % branch_name
+
+    if git_check_tag(tag_finished) is True:
+        git_remove_tag(tag_finished)
+
+    if git_check_tag(tag_released) is True:
+        git_remove_tag(tag_released)
+
+    commit_sha = execute('git log -1 --grep=%s --pretty=%h' % branch_name, RETURN_RESPONSE)
+    git_revert_commit(commit_sha)
+    git_commit('REMOVED/%s' % branch_name)
+    git_push_origin(RELEASE)
+    git_add_tag('waiting for overall approval')
+
+
+def git_publish(version):
+    current_branch = git_current_branch()
+    if current_branch != RELEASE and current_branch != HOTFIX:
+        raise GitError('Command publish is allowed only on RELEASE and HOTFIX branches')
+
+    if git_dev_test_can_progress() is not True:
+        git_checkout(DEVELOP)
+        branch_name = git_last_commit_msg().split('/test')[0]
+        git_checkout(branch_name)
+        git_prolong(True)
+
+    git_checkout(current_branch)
+    if current_branch == HOTFIX:
+        tag_started = '%s/started' % current_branch
+        tag_finished = '%s/finished' % current_branch
+        # TODO: dovrsiti
+
+
+def git_reset_hard(head_num=1):
+    execute('git reset --hard head~%s' % head_num)
 
 
 def git_reset(file_name):
     execute('git reset %s' % file_name)
 
 
-def git_commit(mesagge):
-    execute('git commit -m ' + mesagge)
+def git_add_all():
+    execute('git add --all')
 
 
-def git_commit_amend(mesagge=None):
-    if mesagge is None:
+def git_commit(message):
+    execute('git commit -m ' + message)
+
+
+def git_commit_amend(message=None):
+    if message is None:
         execute('git commit --amend --no-edit')
     else:
-        execute('git commit --amend -m "%s"' % mesagge)
+        execute('git commit --amend -m "%s"' % message)
 
 
-def git_revert_commit(no_commit=''):
-    execute('git revert head %s' % no_commit)
+def git_revert_commit(sha='head'):
+    execute('git revert --no-commit $s' % sha)
 
 
 def git_delete_file(file_name):
     execute('rm %s' % file_name)
+
+
+def git_last_commit_msg():
+    return execute('git log -1 --pretty=%B', RETURN_RESPONSE)
+
+
+def git_push():
+    execute('git push')
 
 
 def git_status():
