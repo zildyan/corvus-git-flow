@@ -12,10 +12,14 @@ class GitError(Exception):
         return repr(self.value)
 
 
-RETURN_REPOSNSE = 'Return response'
+RETURN_RESPONSE = True
 NEW_BRANCH_CREATED = 'Successfully created %s branch\n'
 REPOSITORY_NOT_PREPARED = 'Repository contains branches other than master\n'
-
+PROD = 'PROD'
+RELEASE = 'RELEASE'
+DEVELOP = 'DEVELOP'
+STABLE = 'STABLE'
+HISTORY = 'HISTORY'
 
 def formatted(string_value):
     return '\n'.join(string_value)
@@ -28,7 +32,7 @@ def execute(command, return_response=False):
     if git_query.poll() == 0:
         if return_response is False:
             return
-        elif return_response == RETURN_REPOSNSE:
+        elif return_response is True:
             git_response = git_response.decode()
             return formatted(git_response.splitlines())
         else:
@@ -43,35 +47,25 @@ def git_initialization(master, version):
         if git_repository_prepared(master) is not True:
             return REPOSITORY_NOT_PREPARED
 
-        for branch in ['PROD', 'RELEASE', 'DEVELOP']:
+        for branch in [PROD, RELEASE, DEVELOP, STABLE, HISTORY]:
             git_new_branch(branch, master)
             git_checkout(branch)
-            git_squash_all_commits(version)
-            # git_push_origin(branch)
-
-        for branch in ['STABLE', 'HISTORY']:
-            git_new_branch(branch, master)
+            if branch in [PROD, RELEASE, DEVELOP]:
+                git_squash_all_commits(version)
+            if branch in [RELEASE, STABLE, HISTORY]:
+                git_tag(version)
             # git_push_origin(branch)
 
         # git_push_origin(':%s' % master)
-        git_delete_branch(master)
+        # git_delete_branch(master)
 
     except GitError:
         raise
 
 
-def git_squash_all_commits(version):
-    commit_sha = execute('git commit-tree HEAD^^{tree} -m "%s"' % version, RETURN_REPOSNSE)
-    execute('git reset %s' % commit_sha)
-
-
-def git_push_origin(branch):
-    execute('git push origin %s' % branch)
-
-
 def git_repository_prepared(master):
     try:
-        if execute('git branch', RETURN_REPOSNSE) == '* ' + master:
+        if execute('git branch', RETURN_RESPONSE) == '* ' + master:
             return True
         return False
 
@@ -79,8 +73,21 @@ def git_repository_prepared(master):
         raise
 
 
+def git_squash_all_commits(version):
+    commit_sha = execute('git commit-tree HEAD^^{tree} -m "%s"' % version, RETURN_RESPONSE)
+    execute('git reset %s' % commit_sha)
+
+
+def git_tag(tag):
+    execute('git tag -a %s -m "%s"' % (tag, tag))
+
+
+def git_push_origin(branch):
+    execute('git push origin %s' % branch)
+
+
 def git_current_branch():
-    return execute('git rev-parse --abbrev-ref HEAD', RETURN_REPOSNSE)
+    return execute('git rev-parse --abbrev-ref HEAD', RETURN_RESPONSE)
 
 
 def git_checkout(branch):
@@ -133,12 +140,12 @@ def git_commit(mesagge):
 
 
 def git_status():
-    return execute('git statuss', RETURN_REPOSNSE)
+    return execute('git status', RETURN_RESPONSE)
 
 
 def main():
     try:
-        print(git_initialization(git_current_branch(), 'v1.0.0'))
+        print(git_status())
     except GitError as gErr:
         print(gErr.value)
 
