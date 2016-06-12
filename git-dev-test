@@ -1,0 +1,25 @@
+#!/usr/bin/python
+
+def usage(): print(
+"""
+  Applies on HOTFIX, BUGFIX and FEATURE branches.
+  
+  Makes patch from tag 'name/started' and applies
+  it to DEVELOP branch if no test is in progress.
+""")
+
+from sys import argv
+from git import git_dev_test
+
+if len(argv) == 1 or len(argv) > 2:
+	exit('  Invalid number of arguments.')
+	
+elif 'help' in argv:
+	usage()
+	exit()
+	
+try:
+	git_dev_test()
+
+except GitError as ex:
+	exit(ex.value)

@@ -1,0 +1,28 @@
+#!/usr/bin/python
+
+def usage(): print(
+"""
+  Creates new FEATURE branch from STABLE branch,
+  with name formatted to FEATURE/name.
+""")
+
+from sys import argv
+from git import git_new_feature
+
+if len(argv) == 1 or len(argv) > 2:
+	exit('  Need to specify name of the branch.')
+	
+elif 'help' in argv:
+	usage()
+	exit()
+	
+feature_name = argv[1]
+
+if '.' in feature_name:
+	exit("  %s is not a valid branch name." % feature_name)
+	
+try:
+	git_new_feature(feature_name)
+
+except GitError as ex:
+	exit(ex.value)

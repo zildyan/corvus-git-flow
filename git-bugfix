@@ -1,0 +1,30 @@
+#!/usr/bin/python
+
+def usage(): print(
+"""
+  Creates new BUGFIX branch from STABLE branch,
+  with name formatted to BUGFIX/name.
+""")
+
+from sys import argv
+from git import git_new_bugfix
+from git import GitError
+
+if len(argv) == 1 or len(argv) > 2:
+	exit('  Need to specify name of the branch.')
+	
+elif 'help' in argv:
+	usage()
+	exit()
+	
+bugfix_name = argv[1]
+
+if '.' in bugfix_name:
+	exit("  %s is not a valid branch name." & bugfix_name)
+
+try:	
+	git_new_bugfix(bugfix_name)
+	
+except GitError as ex:
+	exit(ex.value)
+

@@ -1,0 +1,29 @@
+#!/usr/bin/python
+
+def usage(): print(
+"""
+  Creates new HOTFIX branch from PROD branch,
+  with name formatted to HOTFIX/name.
+""")
+
+from sys import argv
+from git import git_new_hotfix
+
+if len(argv) == 1 or len(argv) > 2:
+	exit('  Need to specify name of the branch.')
+	
+elif 'help' in argv:
+	usage()
+	exit()
+	
+hotfix_name = argv[1]
+
+if '.' in hotfix_name:
+	exit("  %s is not a valid branch name." % hotfix_name)
+	
+try:
+	git_new_hotfix(hotfix_name)
+
+except GitError as ex:
+	exit(ex.value)
+
