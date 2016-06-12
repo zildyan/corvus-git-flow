@@ -6,8 +6,10 @@ def usage(): print(
   with name formatted to JUNK/name.
 """)
 
-from sys import argv
+from git import validate_repository
 from git import git_new_junk
+from sys import argv, exit
+from git import GitError
 
 if len(argv) == 1 or len(argv) > 2:
 	exit('  Need to specify name of the branch.')
@@ -18,8 +20,10 @@ if '.' in junk_name:
 	exit("  %s is not a valid branch name." & junk_name)
 	
 try:
-	git_new_junk(junk_name)
-
+	validate_repository()
+	success_msg = git_new_junk(junk_name)
+	print(success_msg)
+	
 except GitError as ex:
 	exit(ex.value)
 

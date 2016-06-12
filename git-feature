@@ -6,8 +6,10 @@ def usage(): print(
   with name formatted to FEATURE/name.
 """)
 
-from sys import argv
+from git import validate_repository
 from git import git_new_feature
+from sys import argv, exit
+from git import GitError
 
 if len(argv) == 1 or len(argv) > 2:
 	exit('  Need to specify name of the branch.')
@@ -22,7 +24,9 @@ if '.' in feature_name:
 	exit("  %s is not a valid branch name." % feature_name)
 	
 try:
-	git_new_feature(feature_name)
-
+	validate_repository()
+	success_msg = git_new_feature(feature_name)
+	print(success_msg)
+	
 except GitError as ex:
 	exit(ex.value)

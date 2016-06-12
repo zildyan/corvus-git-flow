@@ -2,17 +2,16 @@
 
 def usage(): print(
 """
-  Applies on HOTFIX, BUGFIX and FEATURE branches.
+  Applies on RELEASE branch.
   
-  Adds tag 'branch/testing' to the last commit of branch.
-  
-  Makes patch from tag 'branch/started' to 'branch/testing'
-  and applies it to DEVELOP branch if no test is in 
-  progress.
+  Aborts if RELEASE branch doesn't have tags 
+  'waiting for approval' or 'waiting for overall approval',
+  otherwise it removes them.
 """)
 
 from git import validate_repository
-from git import git_dev_test
+from git import validate_branch
+from git import git_approve
 from sys import argv, exit
 from git import GitError
 
@@ -29,7 +28,8 @@ elif len(argv) == 2:
 try:
 	validate_branch()
 	validate_repository()
-	git_dev_test()
-
+	success_msg = git_approve()
+	print(success_msg)
+	
 except GitError as ex:
 	exit(ex.value)

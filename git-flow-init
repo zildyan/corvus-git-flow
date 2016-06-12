@@ -12,9 +12,8 @@ def usage(): print(
   also if omitted version will be set to 1.0.0
 """)
 
-from sys import argv
-from sys import exit
-from git import git_initialization
+from git import git_flow_initialization
+from sys import argv, exit
 from git import GitError
 
 raise GitError("asdgfa")
@@ -36,8 +35,8 @@ for option in argv:
 		root_branch = option
 	
 try:
-	result = git_initialization(root_branch, version)
-	print(result)
+	success_msg = git_flow_initialization(root_branch, version)
+	print(success_msg)
 	
 except GitError as ex:
 	exit(ex.value)

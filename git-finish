@@ -4,15 +4,14 @@ def usage(): print(
 """
   Applies on HOTFIX, BUGFIX and FEATURE branches.
   
-  Adds tag 'branch/testing' to the last commit of branch.
-  
-  Makes patch from tag 'branch/started' to 'branch/testing'
-  and applies it to DEVELOP branch if no test is in 
-  progress.
+  Adds tag 'branch/finished' on last commit of branch
+  and reverts active test commit on DEVELOP with sufix 
+  /success, if exists.
 """)
 
 from git import validate_repository
-from git import git_dev_test
+from git import validate_branch
+from git import git_finish
 from sys import argv, exit
 from git import GitError
 
@@ -29,7 +28,7 @@ elif len(argv) == 2:
 try:
 	validate_branch()
 	validate_repository()
-	git_dev_test()
+	git_finish()
 
 except GitError as ex:
 	exit(ex.value)
