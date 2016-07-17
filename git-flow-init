@@ -1,9 +1,14 @@
 #!/usr/bin/python
 
-def usage(): print(
-"""
+
+from git import start_flow_initialization
+from sys import argv, exit
+from git import GitError
+
+
+def usage(): print("""
   Initialize main branches of corvus git workflow.
-	  
+
   Arguments specify root branch and starting version.
   Root branch name must not contain char '.' while 
   version must contain at least one.
@@ -12,31 +17,29 @@ def usage(): print(
   also if omitted version will be set to 1.0.0
 """)
 
-from git import git_flow_initialization
-from sys import argv, exit
-from git import GitError
 
-raise GitError("asdgfa")
 version = ''
 root_branch = ''
 
 if len(argv) == 1 or len(argv) > 3:
-	exit('  Invalid number of arguments')
+    exit('  Invalid number of arguments')
 
 for option in argv:
-	if '.' in option:
-		version = option
-		
-	elif 'help' == option:
-		usage()
-		exit()
-		
-	else:
-		root_branch = option
-	
+    if '.' in option:
+        version = option
+
+    elif 'help' == option:
+        usage()
+        exit()
+
+    else:
+        root_branch = option
+
 try:
-	success_msg = git_flow_initialization(root_branch, version)
-	print(success_msg)
-	
+    if root_branch == '' or version == '':
+        exit('Root branch and starting version must be provided.')
+    success_msg = start_flow_initialization(root_branch, version)
+    print(success_msg)
+
 except GitError as ex:
-	exit(ex.value)
+    exit(ex.value)

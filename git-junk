@@ -1,30 +1,30 @@
 #!/usr/bin/python
 
-def usage(): print(
-"""
+
+from git import validate_repository
+from git import create_new_junk_branch
+from sys import argv, exit
+from git import GitError
+
+
+def usage(): print("""
   Creates new JUNK branch from current branch,
   with name formatted to JUNK/name.
 """)
 
-from git import validate_repository
-from git import git_new_junk
-from sys import argv, exit
-from git import GitError
 
 if len(argv) == 1 or len(argv) > 2:
-	exit('  Need to specify name of the branch.')
+    exit('  Need to specify name of the branch.')
 
 junk_name = argv
 
 if '.' in junk_name:
-	exit("  %s is not a valid branch name." & junk_name)
-	
+    exit("  %s is not a valid branch name." & junk_name)
+
 try:
-	validate_repository()
-	success_msg = git_new_junk(junk_name)
-	print(success_msg)
-	
+    validate_repository()
+    success_msg = create_new_junk_branch(junk_name)
+    print(success_msg)
+
 except GitError as ex:
-	exit(ex.value)
-
-
+    exit(ex.value)

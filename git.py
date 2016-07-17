@@ -24,8 +24,8 @@ STABLE = 'STABLE'
 HISTORY = 'HISTORY'
 MAIN_BRANCHES = [PROD, RELEASE, DEVELOP, STABLE, HISTORY]
 DEVELOP_END_KEYWORDS = ['success', 'failed', 'forced_down']
-WAITING_FOR_APPROVAL = 'waiting_for_approval'
-WAITING_FOR_OVERALL_APPROVAL = 'waiting_for_overall_approval'
+APPROVAL = 'waiting_for_approval'
+OVERALL_APPROVAL = 'waiting_for_overall_approval'
 
 
 def formatted(string_value):
@@ -37,42 +37,38 @@ def execute(command, return_response=False):
     (git_response, error) = git_query.communicate()
 
     if git_query.poll() == 0:
-        if return_response is False:
-            return
-        elif return_response is True:
+        if return_response is True:
             git_response = git_response.decode()
             return formatted(git_response.splitlines())
-        else:
-            raise GitError('  Unexisting execute option')
+        return
+
     else:
         error = error.decode()
         raise GitError(formatted(error.splitlines()))
 
 
-def git_flow_initialization(root_branch, version):
+def start_flow_initialization(root_branch, version):
     try:
-        validate_repository(root_branch)
-
+        validate_initialization(root_branch)
         execute('git config --global push.followTags=True')
 
         for branch in MAIN_BRANCHES:
-            git_new_branch(branch, root_branch)
-            git_checkout(branch)
+            create_new_branch(branch, root_branch)
 
             if branch in [PROD, RELEASE, DEVELOP]:
-                git_squash_all_commits(version)
+                squash_all_commits(version)
 
-            git_commit_amend()
+            commit_amend()
 
             if branch in [RELEASE, STABLE, HISTORY]:
-                git_add_tag('%s/%s' % (branch, version))
+                add_tag('%s/%s' % (branch, version))
 
-            git_push_origin(branch)
+            push_to_origin(branch)
 
-        git_delete_local_branch(root_branch)
+        # git_delete_local_branch(root_branch)
 
-        msg = ('  Flow initialization successfully finished\n'
-               '  Set default branch on remote repository to PROD')
+        msg = ('  Flow initialization successfully finished.\n'
+               '  Set default branch on remote repository to PROD.')
 
         return msg
 
@@ -80,34 +76,34 @@ def git_flow_initialization(root_branch, version):
         raise ex
 
 
-def validate_repository(root_branch=None):
-    validation = False
+def validate_initialization(root_branch):
     remote_branches = execute('git branch -r', RETURN_RESPONSE)
     local_branches = execute('git branch', RETURN_RESPONSE)
 
-    if root_branch is not None:
-        if root_branch not in local_branches:
-            raise GitError('  Specified root branch doesn\'t exists.')
-    else:
-        validation = True
+    if root_branch not in local_branches:
+        raise GitError('  Specified root branch does not exists.')
 
     for branch in MAIN_BRANCHES:
         if branch in remote_branches or branch in local_branches:
-            if not validation:
-                raise GitError('  Corvus git flow main branches already initialized.')
-        else:
-            if validation:
-                raise GitError('  %s branch is not initialized.' % branch)
+            raise GitError('  Corvus git flow main branches already initialized.')
 
-    return True
+
+def validate_repository():
+    remote_branches = execute('git branch -r', RETURN_RESPONSE)
+    local_branches = execute('git branch', RETURN_RESPONSE)
+
+    for branch in MAIN_BRANCHES:
+        if branch not in remote_branches and branch not in local_branches:
+            raise GitError('  %s branch is not initialized.' % branch)
 
 
 def validate_branch():
-    current_branch = git_current_branch()
-    invalid_branch = True;
+    current_branch = get_current_branch()
 
     if current_branch in MAIN_BRANCHES or JUNK in current_branch:
         raise GitError('  Command isn\'t allowed on main branches.')
+
+    invalid_branch = True
 
     for branch in [HOTFIX, BUGFIX, FEATURE]:
         if current_branch.startswith(branch):
@@ -118,326 +114,353 @@ def validate_branch():
         raise GitError('  Command isn\'t allowed on custom branches.')
 
 
-def git_new_bugfix(branch_name):
-    return git_make_branch(branch_name, BUGFIX, STABLE)
+def create_new_bugfix_branch(branch_name):
+    return create_flow_branch(branch_name, BUGFIX, STABLE)
 
 
-def git_new_feature(branch_name):
-    return git_make_branch(branch_name, FEATURE, STABLE)
+def create_new_feature_branch(branch_name):
+    return create_flow_branch(branch_name, FEATURE, STABLE)
 
 
-def git_new_hotfix(branch_name):
-    return git_make_branch(branch_name, HOTFIX, PROD)
+def create_new_hotfix_branch(branch_name):
+    return create_flow_branch(branch_name, HOTFIX, PROD)
 
 
-def git_new_junk(branch_name):
-    return git_make_branch(branch_name, JUNK)
+def create_new_junk_branch(branch_name):
+    return create_flow_branch(branch_name, JUNK)
 
 
-def git_dev_test():
-    current_branch = git_current_branch();
+def dev_test():
+    current_branch = get_current_branch()
 
-    do_testing = proceed_to_dev_test()
+    validate_conditions_for_test(current_branch)
+    test_name = get_test_name(current_branch)
 
-    if do_testing is not True and current_branch == HOTFIX:
-        git_checkout(DEVELOP)
-        branch_name = git_last_commit_msg().split('/test')[0]
-        git_checkout(branch_name)
-        git_prolong(WITH_FORCE)
-
-    elif do_testing is not True:
-        raise GitError('  Testing in progress')
-
-    test_name = '%s/test#%d' % (current_branch, git_test_number())
-    git_checkout(current_branch)
-
-    tag_started = '%s/started' % current_branch
-    if git_check_tag(tag_started) is not True:
-        raise GitError("  Branch is missing 'started' tag.")
-
-    tag_testing = '%s/testing' % current_branch
+    tag_started = get_started_tag(current_branch)
+    tag_testing = get_testing_tag(current_branch)
     patch_name = format_patch_name(current_branch, 'test')
 
-    git_add_tag(tag_testing)
-    git_make_patch(tag_started, tag_testing, patch_name)
-    git_checkout(STABLE)
-    git_apply_patch(patch_name)
-    git_delete_file(patch_name)
-    git_add_all()
-    git_commit(test_name)
-    git_push_origin(STABLE)
+    add_tag(tag_testing)
+    create_patch(tag_started, tag_testing, patch_name)
+
+    checkout(DEVELOP)
+    apply_patch(patch_name)
+    delete_patch(patch_name)
+    commit_all_changes(test_name)
+    push_to_origin(DEVELOP)
+
+    checkout(current_branch)
     return '  %s applied on DEVELOP.' % test_name
 
 
-def git_prolong(force=False):
-    current_branch = git_current_branch()
+def validate_conditions_for_test(branch):
+    tag_started = '%s/started' % branch
+    if check_tag(tag_started) is False:
+        raise GitError("  Branch is missing 'started' tag.")
 
-    if current_branch.startswith(HOTFIX):
-        force = True
+    if is_testing_in_progress() is True:
+        if branch.startswith(HOTFIX):
+            prolong_testing_branch()
+            checkout(branch)
+        else:
+            raise GitError('  Testing in progress')
 
-    tag_testing = '%s/testing' % current_branch
-    tag_finished = '%s/finished' % current_branch
-    tag_released = '%s/released' % current_branch
 
-    if git_check_tag(tag_released) is True:
+def get_test_name(current_branch):
+    test_name = '%s/test#%d' % (current_branch, get_test_number(current_branch))
+    return test_name
+
+
+def prolong():
+    current_branch = get_current_branch()
+    tag_testing = get_testing_tag(current_branch)
+    tag_finished = get_finished_tag(current_branch)
+    tag_released = get_released_tag(current_branch)
+
+    if check_tag(tag_released) is True:
         raise GitError('Branch is already released')
 
-    if git_check_tag(tag_finished) is True:
-        git_remove_tag(tag_finished, WITH_FORCE)
+    elif check_tag(tag_finished) is True:
+        remove_tag(tag_finished)
         return '  %s successfully prolonged.' % current_branch
 
-    if git_check_tag(tag_testing) is True:
-        git_remove_tag(tag_testing, WITH_FORCE)
-        if force is True:
-            git_end_dev_test('forced_down')
-        else:
-            git_end_dev_test('failed')
-            return '  %s successfully prolonged.' % current_branch
+    elif check_tag(tag_testing) is True:
+        terminate_test(current_branch)
+        remove_tag(tag_testing)
+        return '  %s successfully prolonged.' % current_branch
 
-    raise GitError('  Branch is already active.')
+    else:
+        raise GitError('  Branch is already active.')
 
 
-def git_finish():
-    current_branch = git_current_branch()
+def terminate_test(current_branch):
+    if current_branch.startswith(HOTFIX) is True:
+        end_dev_test('forced_down')
+    else:
+        end_dev_test('failed')
 
-    tag_testing = '%s/testing' % current_branch
-    tag_finished = '%s/finished' % current_branch
-    tag_released = '%s/released' % current_branch
+    checkout(current_branch)
 
-    if git_check_tag(tag_released) is True:
+
+def finish():
+    current_branch = get_current_branch()
+    tag_testing = get_testing_tag(current_branch)
+    tag_finished = get_finished_tag(current_branch)
+    tag_released = get_released_tag(current_branch)
+
+    if check_tag(tag_released) is True:
         raise GitError('  Branch is already released')
 
-    if git_check_tag(tag_finished) is True:
+    if check_tag(tag_finished) is True:
         raise GitError('  Branch is already finished')
 
-    if git_check_tag(tag_testing) is True:
-        git_remove_tag(tag_testing, WITH_FORCE)
-        git_end_dev_test('success')
+    if check_tag(tag_testing) is True:
+        remove_tag(tag_testing)
+        end_dev_test('success')
 
-    git_checkout(current_branch)
-    git_add_tag(tag_finished)
+    checkout(current_branch)
+    add_tag(tag_finished)
     return '  %s successfully finished.' % current_branch
 
 
-def git_release():
-    current_branch = git_current_branch()
+def release():
+    current_branch = get_current_branch()
+    tag_started = get_started_tag(current_branch)
+    tag_finished = get_finished_tag(current_branch)
+    tag_released = get_released_tag(current_branch)
 
-    tag_started = '%s/started' % current_branch
-    tag_finished = '%s/finished' % current_branch
-    tag_released = '%s/released' % current_branch
-
-    if git_check_tag(tag_released) is True:
+    if check_tag(tag_released) is True:
         raise GitError('  Branch is already released')
 
-    if git_check_tag(tag_finished) is False:
+    if check_tag(tag_finished) is False:
         raise GitError('  Branch is not finished')
 
-    if git_check_tag(WAITING_FOR_APPROVAL) is True:
+    if check_tag(APPROVAL) is True:
         raise GitError('  RELEASE branch is waiting for approval')
 
-    if git_check_tag(WAITING_FOR_OVERALL_APPROVAL) is True:
+    if check_tag(OVERALL_APPROVAL) is True:
         raise GitError('  RELEASE branch is waiting for overall approval')
 
     patch_name = format_patch_name(current_branch, 'release')
+    add_tag(tag_finished)
+    create_patch(tag_started, tag_finished, patch_name)
 
-    git_add_tag(tag_finished)
-    git_make_patch(tag_started, tag_finished, patch_name)
-    git_checkout(RELEASE)
-    git_apply_patch(patch_name)
-    git_delete_file(patch_name)
-    git_add_all()
-    git_commit('%s' % current_branch)
-    git_add_tag(WAITING_FOR_APPROVAL)
-    git_push_origin(RELEASE)
+    checkout(RELEASE)
+    apply_patch(patch_name)
+    delete_patch(patch_name)
+    commit_all_changes('%s' % current_branch)
+    add_tag(APPROVAL)
+    push_to_origin(RELEASE)
+
+    checkout(current_branch)
+    return '  %s branch released.' % current_branch
 
 
-def git_approve():
-    success_msg = 'RELEASE approved'
+def approve():
+    success_msg = '  Released branch approved'
 
-    if git_current_branch() != RELEASE:
+    if get_current_branch() != RELEASE:
         raise GitError('  Command approve is allowed only on RELEASE branch')
 
-    if git_check_tag(WAITING_FOR_APPROVAL) is True:
-        git_remove_tag(WAITING_FOR_APPROVAL, WITH_FORCE)
+    if check_tag(APPROVAL) is True:
+        remove_tag(APPROVAL, WITH_FORCE)
         return success_msg
 
-    if git_check_tag(WAITING_FOR_OVERALL_APPROVAL) is True:
-        git_remove_tag(WAITING_FOR_OVERALL_APPROVAL)
+    elif check_tag(OVERALL_APPROVAL) is True:
+        remove_tag(OVERALL_APPROVAL)
         return success_msg
 
-    raise GitError('  RELEASE branch is already approved')
+    else:
+        raise GitError('  RELEASE branch is already approved')
 
 
-def git_redeem():
-    if git_current_branch() != RELEASE:
-        raise GitError('  Command approve is allowed only on RELEASE branch')
+def redeem():
+    if get_current_branch() != RELEASE:
+        raise GitError('  Command redeem is allowed only on RELEASE branch')
 
-    if git_check_tag(WAITING_FOR_APPROVAL) is not True:
+    if check_tag(APPROVAL) is not True:
         raise GitError('  There is nothing to redeem on RELEASE branch')
 
-    branch_name = git_last_commit_msg()
-    tag_finished = '%s/finished' % branch_name
-    tag_released = '%s/released' % branch_name
+    branch_name = get_last_commit_msg()
+    tag_finished = get_finished_tag(branch_name)
+    tag_released = get_released_tag(branch_name)
 
-    git_checkout(branch_name)
-    validate_branch(branch_name)
+    checkout(branch_name)
+    validate_branch()
 
-    git_remove_tag(tag_finished)
-    git_remove_tag(tag_released)
+    remove_tag(tag_finished)
+    remove_tag(tag_released)
 
-    git_checkout(RELEASE)
-    git_remove_tag(WAITING_FOR_APPROVAL)
-    git_reset_hard()
-    git_push_origin(RELEASE)
+    checkout(RELEASE)
+    remove_tag(APPROVAL)
+    hard_reset()
+    push_to_origin(RELEASE)
     return '  %s needs to redeem itself.' % branch_name
 
 
-def git_remove(branch_name):
-    if git_current_branch() != RELEASE:
+def remove(branch_name):
+    if get_current_branch() != RELEASE:
         raise GitError('  Command remove is allowed only on RELEASE branch')
 
-    if not git_commit_grep(branch_name):
+    if not get_last_commit_msg_with_substring(branch_name):
         raise GitError('  There is no released feature, bugfix or hotfix named %s' % branch_name)
 
-    if git_check_tag(WAITING_FOR_APPROVAL) is True:
+    if check_tag(APPROVAL) is True:
         raise GitError('  RELEASE branch is waiting for approval')
 
-    if git_check_tag(WAITING_FOR_OVERALL_APPROVAL) is True:
+    if check_tag(OVERALL_APPROVAL) is True:
         raise GitError('  RELEASE branch is waiting for overall approval')
 
-    tag_finished = '%s/finished' % branch_name
-    tag_released = '%s/released' % branch_name
-    git_remove_tag(tag_finished)
-    git_remove_tag(tag_released)
+    remove_tag(get_finished_tag(branch_name))
+    remove_tag(get_released_tag(branch_name))
 
     commit_sha = execute('git log -1 --grep=%s --pretty=%h' % branch_name, RETURN_RESPONSE)
-    git_revert_commit(commit_sha)
-    git_commit('REMOVED/%s' % branch_name)
-    git_add_tag(WAITING_FOR_OVERALL_APPROVAL)
-    git_push_origin(RELEASE)
+    revert_commit(commit_sha)
+    commit('REMOVED/%s' % branch_name)
+    add_tag(OVERALL_APPROVAL)
+    push_to_origin(RELEASE)
     return ' %s successfully removed from RELEASE' % branch_name
 
 
-def git_publish(version):
-    current_branch = git_current_branch()
+def publish(version):
+    current_branch = get_current_branch()
     if current_branch != RELEASE and current_branch != HOTFIX:
         raise GitError('  Command publish is allowed only on RELEASE and HOTFIX branches')
 
-    if proceed_to_dev_test() is False:
-        git_checkout(DEVELOP)
-        branch_name = git_last_commit_msg().split('/test')[0]
-        git_checkout(branch_name)
-        git_prolong(WITH_FORCE)
+    if is_testing_in_progress() is True:
+        prolong_testing_branch()
+        checkout(current_branch)
 
-    git_checkout(current_branch)
-    tag_started = '%s/started' % current_branch
-    tag_finished = '%s/finished' % current_branch
+    tag_started = get_started_tag(current_branch)
+    tag_finished = get_finished_tag(current_branch)
     patch_name = format_patch_name(current_branch, 'release')
-    git_make_patch(tag_started, tag_finished, patch_name)
+    create_patch(tag_started, tag_finished, patch_name)
 
-    git_checkout(DEVELOP)
-    git_apply_patch(patch_name)
-    git_commit('%s' % version)
+    checkout(DEVELOP)
+    apply_patch(patch_name)
+    commit('%s' % version)
 
-    git_checkout(RELEASE)
-    git_add_tag('RELEASE/%s' % version)
+    checkout(RELEASE)
+    add_tag('RELEASE/%s' % version)
 
-    git_checkout(PROD)
-    git_apply_patch(patch_name)
-    git_commit('%s' % version)
+    checkout(PROD)
+    apply_patch(patch_name)
+    commit('%s' % version)
 
     # TODO stable
-    git_push_origin(DEVELOP)
-    git_push_origin(STABLE)
-    git_push_origin(PROD)
+    push_to_origin(DEVELOP)
+    push_to_origin(STABLE)
+    push_to_origin(PROD)
 
     return ''
 
 
-def git_add_tag(tag_name):
-    if git_check_tag(tag_name) is True:
+def checkout(branch_name):
+    execute('git checkout %s' % branch_name)
+
+
+def get_current_branch():
+    return execute('git rev-parse --abbrev-ref HEAD', RETURN_RESPONSE)
+
+
+def create_new_branch(branch_name, main_branch):
+    execute('git branch %s %s' % (branch_name, main_branch))
+    checkout(branch_name)
+
+
+def push_branch(branch_name):
+    execute('git push --set-upstream origin %s' % branch_name)
+
+
+def delete_local_branch(branch_name):
+    execute('git branch -D %s' % branch_name)
+
+
+def delete_remote_branch(branch_name):
+    execute('git push origin --delete %s' % branch_name)
+
+
+def create_flow_branch(branch_name, branch_type, main_branch=None):
+        if main_branch is None:
+            if branch_name.startswith(JUNK):
+                main_branch = get_current_branch()
+
+        branch_full_name = '%s/%s' % (branch_type, branch_name)
+        create_new_branch(branch_full_name, main_branch)
+        commit_amend()
+        add_tag('%s/started')
+        push_to_origin(branch_full_name, '-u')
+        return '  Successfully created %s branch' % branch_full_name
+
+
+def add_tag(tag_name):
+    if check_tag(tag_name) is True:
         raise GitError('  Aborted: tag already exists')
     execute('git tag -a %s -m "%s"' % (tag_name, tag_name))
 
 
-def git_push_tag(tag_name):
-    if git_check_tag(tag_name) is False:
-        raise GitError('  Aborted: tag doesn\'t exists')
+def push_tag(tag_name):
+    if check_tag(tag_name) is False:
+        raise GitError('  Aborted: tag does not exists')
     execute('git push tag %s' % tag_name)
 
 
-def git_check_tag(tag_name):
+def check_tag(tag_name):
     tags = execute('git tag', RETURN_RESPONSE)
     if tag_name in tags:
         return True
     return False
 
 
-def git_remove_tag(tag_name, force=False):
-    if force is True or git_check_tag(tag_name):
+def remove_tag(tag_name):
+    if check_tag(tag_name):
         execute('git tag -d %s' % tag_name)
         execute('git push --delete origin %s' % tag_name)
 
 
-def git_checkout(branch_name):
-    execute('git checkout ' + branch_name)
+def get_started_tag(branch_name):
+    return '%s/started' % branch_name
 
 
-def git_current_branch():
-    return execute('git rev-parse --abbrev-ref HEAD', RETURN_RESPONSE)
+def get_testing_tag(branch_name):
+    return '%s/testing' % branch_name
 
 
-def git_new_branch(branch_name, main_branch):
-    execute('git branch %s %s' % (branch_name, main_branch))
+def get_finished_tag(branch_name):
+    return '%s/finished' % branch_name
 
 
-def git_push_branch(branch_name):
-    execute('git push --set-upstream origin %s' % branch_name)
+def get_released_tag(branch_name):
+    return '%s/released' % branch_name
 
 
-def git_delete_local_branch(branch_name):
-    execute('git branch -D %s' % branch_name)
-
-
-def git_delete_remote_branch(branch_name):
-    execute('git push origin --delete %s' % branch_name)
-
-
-def git_make_branch(branch_name, branch_type, main_branch=None):
-        current_branch = git_current_branch()
-        if main_branch is None:
-            if branch_name.startswith(JUNK):
-                main_branch = current_branch
-
-        branch_full_name = '%s/%s' % (branch_type, branch_name)
-        git_new_branch(branch_full_name, main_branch)
-        git_checkout(branch_full_name)
-        git_commit_amend()
-        git_add_tag('%s/started')
-        git_push_origin(branch_full_name, '-u')
-        return '  Successfully created %s branch' % branch_full_name
-
-
-def git_end_dev_test(reason):
-    git_checkout(DEVELOP)
-    if proceed_to_dev_test() is not True:
+def end_dev_test(reason):
+    checkout(DEVELOP)
+    if is_testing_in_progress() is False:
         raise GitError('  There is no tests on DEVELOP')
 
-    git_revert_commit()
-    git_commit('%s/%s' % (git_last_commit_msg(), reason))
-    git_push_origin(DEVELOP)
+    revert_commit()
+    commit('%s/%s' % (get_last_commit_msg(), reason))
+    push_to_origin(DEVELOP)
     return
 
 
-def proceed_to_dev_test():
-    git_checkout(DEVELOP)
-    last_commit_msg = git_last_commit_msg()
-    return check_end_keywords(last_commit_msg)
+def prolong_testing_branch():
+    checkout(DEVELOP)
+    branch_name = get_last_commit_msg().split('/test')[0]
+    checkout(branch_name)
+    prolong()
 
 
-def git_test_number(branch_name):
-    git_checkout(DEVELOP)
-    test = git_commit_grep(branch_name)
+def is_testing_in_progress():
+    checkout(DEVELOP)
+    last_commit_msg = get_last_commit_msg()
+    return not check_end_keywords(last_commit_msg)
+
+
+def get_test_number(branch_name):
+    checkout(DEVELOP)
+    test = get_last_commit_msg_with_substring(branch_name)
     if not test:
         return 1
 
@@ -455,11 +478,11 @@ def check_end_keywords(commit_message):
     return False
 
 
-def git_make_patch(starting_tag, ending_tag, patch_name):
+def create_patch(starting_tag, ending_tag, patch_name):
     execute('git diff --full-index --binary %s %s > %s' % (starting_tag, ending_tag, patch_name))
 
 
-def git_apply_patch(patch_name):
+def apply_patch(patch_name):
     execute('git apply --check %s' % patch_name)
     execute('git apply -p1 < %s' % patch_name)
 
@@ -470,57 +493,54 @@ def format_patch_name(branch_name, type_of_patch):
     return '%s_%s.patch' % (''.join(branch), type_of_patch)
 
 
-def git_add_all():
+def add_all_to_stage():
     execute('git add --all')
 
 
-def git_commit(message):
+def commit(message):
     execute('git commit -m ' + message)
 
 
-def git_squash_all_commits(version):
+def commit_all_changes(commit_msg):
+    add_all_to_stage()
+    commit(commit_msg)
+
+
+def squash_all_commits(version):
     commit_sha = execute('git commit-tree HEAD^^{tree} -m "%s"' % version, RETURN_RESPONSE)
     execute('git reset %s' % commit_sha)
 
 
-def git_commit_grep(message):
+def get_last_commit_msg_with_substring(message):
     return execute("git log -1 --grep='%s/' --pretty=%B" % message, RETURN_RESPONSE)
 
 
-def git_last_commit_msg():
+def get_last_commit_msg():
     return execute('git log -1 --pretty=%B', RETURN_RESPONSE)
 
 
-def git_commit_amend(message=None):
+def commit_amend(message=None):
     if message is None:
         execute('git commit --amend --no-edit')
     else:
         execute('git commit --amend -m "%s"' % message)
 
 
-def git_revert_commit(sha='head'):
+def revert_commit(sha='head'):
     execute('git revert --no-commit $s' % sha)
 
 
-def git_delete_file(file_name):
+def delete_patch(file_name):
     execute('rm %s' % file_name)
 
 
-def git_reset_hard(head_num=1):
+def hard_reset(head_num=1):
     execute('git reset --hard head~%s' % head_num)
 
 
-def git_reset(file_name):
+def soft_reset(file_name):
     execute('git reset %s' % file_name)
 
 
-def git_push():
-    execute('git push')
-
-
-def git_push_origin(branch_name, upstream=''):
+def push_to_origin(branch_name, upstream=''):
     execute('git push -f %s origin %s' % (upstream, branch_name))
-
-
-def git_status():
-    return execute('git status', RETURN_RESPONSE)

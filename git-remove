@@ -1,7 +1,13 @@
 #!/usr/bin/python
 
-def usage(): print(
-"""
+
+from git import validate_repository
+from git import remove
+from sys import argv, exit
+from git import GitError
+
+
+def usage(): print("""
   Applies on RELEASE branch.
   
   Aborts if 'waiting for approval' or 'waiting for
@@ -14,28 +20,23 @@ def usage(): print(
   Adds a tag 'waiting for overall approval'.
 """)
 
-from git import validate_repository
-from git import git_remove
-from sys import argv, exit
-from git import GitError
 
 if len(argv) == 1 or len(argv) > 2:
-	exit('  Need to specify name of the branch.')
-	
+    exit('  Need to specify name of the branch.')
+
 elif 'help' in argv:
-	usage()
-	exit()
-	
+    usage()
+    exit()
+
 branch_name = argv[1]
 
 if '.' in branch_name:
-	exit("  %s is not a valid branch name." % branch_name)
-	
-try:
-	validate_repository()
-	success_msg = git_remove(branch_name)
-	print(success_msg)
-	
-except GitError as ex:
-	exit(ex.value)
+    exit("  %s is not a valid branch name." % branch_name)
 
+try:
+    validate_repository()
+    success_msg = remove(branch_name)
+    print(success_msg)
+
+except GitError as ex:
+    exit(ex.value)

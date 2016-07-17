@@ -1,33 +1,34 @@
 #!/usr/bin/python
 
-def usage(): print(
-"""
+
+from git import validate_repository
+from git import create_new_hotfix_branch
+from sys import argv, exit
+from git import GitError
+
+
+def usage(): print("""
   Creates new HOTFIX branch from PROD branch,
   with name formatted to HOTFIX/name.
 """)
 
-from git import validate_repository
-from git import git_new_hotfix
-from sys import argv, exit
-from git import GitError
 
 if len(argv) == 1 or len(argv) > 2:
-	exit('  Need to specify name of the branch.')
-	
+    exit('  Need to specify name of the branch.')
+
 elif 'help' in argv:
-	usage()
-	exit()
-	
+    usage()
+    exit()
+
 hotfix_name = argv[1]
 
 if '.' in hotfix_name:
-	exit("  %s is not a valid branch name." % hotfix_name)
-	
-try:
-	validate_repository()
-	success_msg = git_new_hotfix(hotfix_name)
-	print(success_msg)
-	
-except GitError as ex:
-	exit(ex.value)
+    exit("  %s is not a valid branch name." % hotfix_name)
 
+try:
+    validate_repository()
+    success_msg = create_new_hotfix_branch(hotfix_name)
+    print(success_msg)
+
+except GitError as ex:
+    exit(ex.value)

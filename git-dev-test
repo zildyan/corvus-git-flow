@@ -1,7 +1,14 @@
 #!/usr/bin/python
 
-def usage(): print(
-"""
+
+from git import validate_branch
+from git import validate_repository
+from git import dev_test
+from sys import argv, exit
+from git import GitError
+
+
+def usage(): print("""
   Applies on HOTFIX, BUGFIX and FEATURE branches.
   
   Adds tag 'branch/testing' to the last commit of branch.
@@ -11,25 +18,21 @@ def usage(): print(
   progress.
 """)
 
-from git import validate_repository
-from git import git_dev_test
-from sys import argv, exit
-from git import GitError
 
 if len(argv) > 2:
-	exit('  Invalid number of arguments.')
-	
+    exit('  Invalid number of arguments.')
+
 elif 'help' in argv:
-	usage()
-	exit()
-	
+    usage()
+    exit()
+
 elif len(argv) == 2:
-	exit('  Invalid option')
-	
+    exit('  Invalid option')
+
 try:
-	validate_branch()
-	validate_repository()
-	git_dev_test()
+    validate_branch()
+    validate_repository()
+    dev_test()
 
 except GitError as ex:
-	exit(ex.value)
+    exit(ex.value)
