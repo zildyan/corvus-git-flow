@@ -1,8 +1,9 @@
 #!/usr/bin/python
 
 
-from git import validate_repository
+from git import validate_flow_initialized
 from git import create_new_junk_branch
+from git import format_blanks
 from sys import argv, exit
 from git import GitError
 
@@ -13,16 +14,20 @@ def usage(): print("""
 """)
 
 
-if len(argv) == 1 or len(argv) > 2:
-    exit('  Need to specify name of the branch.')
+if len(argv) != 2:
+    exit(format_blanks('Need to specify name of the branch.'))
 
-junk_name = argv
+elif 'help' in argv:
+    usage()
+    exit()
+
+junk_name = argv[1]
 
 if '.' in junk_name:
-    exit("  %s is not a valid branch name." & junk_name)
+    exit(format_blanks('%s is not a valid branch name.' & junk_name))
 
 try:
-    validate_repository()
+    validate_flow_initialized()
     success_msg = create_new_junk_branch(junk_name)
     print(success_msg)
 

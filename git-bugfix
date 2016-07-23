@@ -1,8 +1,9 @@
 #!/usr/bin/python
 
 
-from git import validate_repository
+from git import validate_flow_initialized
 from git import create_new_bugfix_branch
+from git import format_blanks
 from sys import argv, exit
 from git import GitError
 
@@ -14,8 +15,8 @@ def usage(): print(
 """)
 
 
-if len(argv) == 1 or len(argv) > 2:
-    exit('  Need to specify name of the branch.')
+if len(argv) != 2:
+    exit(format_blanks('Need to specify name of the branch.'))
 
 elif 'help' in argv:
     usage()
@@ -24,10 +25,10 @@ elif 'help' in argv:
 bugfix_name = argv[1]
 
 if '.' in bugfix_name:
-    exit("  %s is not a valid branch name." & bugfix_name)
+    exit(format_blanks('%s is not a valid branch name.' & bugfix_name))
 
 try:
-    validate_repository()
+    validate_flow_initialized()
     success_msg = create_new_bugfix_branch(bugfix_name)
     print(success_msg)
 

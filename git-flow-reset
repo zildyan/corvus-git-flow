@@ -1,0 +1,13 @@
+#!/usr/bin/python
+
+
+from git import reset_initialization
+from git import GitError
+
+
+try:
+    success_msg = reset_initialization()
+    print(success_msg)
+
+except GitError as ex:
+    exit(ex.value)

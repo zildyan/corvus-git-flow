@@ -2,6 +2,7 @@
 
 
 from git import start_flow_initialization
+from git import format_blanks
 from sys import argv, exit
 from git import GitError
 
@@ -19,26 +20,22 @@ def usage(): print("""
 
 
 version = ''
-root_branch = ''
 
-if len(argv) == 1 or len(argv) > 3:
-    exit('  Invalid number of arguments')
+if len(argv) != 2:
+    exit(format_blanks('Invalid number of arguments: missing starting version'))
 
-for option in argv:
-    if '.' in option:
-        version = option
+elif 'help' in argv:
+    usage()
+    exit()
 
-    elif 'help' == option:
-        usage()
-        exit()
-
-    else:
-        root_branch = option
+version = argv[1]
 
 try:
-    if root_branch == '' or version == '':
-        exit('Root branch and starting version must be provided.')
-    success_msg = start_flow_initialization(root_branch, version)
+    if version == '':
+        exit(format_blanks('Starting version must be provided (eg. 1.0.0)'))
+
+    print(format_blanks('Initialization...'))
+    success_msg = start_flow_initialization(version)
     print(success_msg)
 
 except GitError as ex:
