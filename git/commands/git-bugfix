@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
 
-from git import validate_flow_initialized
+from sys import argv, exit
+
+from git import GitError
 from git import create_new_bugfix_branch
 from git import format_blanks
-from sys import argv, exit
-from git import GitError
+from git import validate_flow_initialized
 
 
 def usage(): print(

@@ -1,0 +1,36 @@
+#!/usr/bin/python
+
+
+from sys import argv, exit
+
+from git import GitError
+from git import format_blanks
+from git import in_version
+from git import validate_flow_initialized
+
+
+def usage(): print("""
+  List all features, bugfixes and hotfixes in addressed version,
+  or if omitted fetch 'yet-to-be-published' upgrades.
+""")
+
+
+version = None
+
+if len(argv) > 2:
+    exit(format_blanks('Invalid number of arguments.'))
+
+elif 'help' in argv:
+    usage()
+    exit()
+
+elif len(argv) == 2:
+    version = argv[1]
+
+try:
+    validate_flow_initialized()
+    success_msg = in_version(version)
+    print(success_msg)
+
+except GitError as ex:
+    exit(ex.value)

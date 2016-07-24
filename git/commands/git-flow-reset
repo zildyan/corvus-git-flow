@@ -1,9 +1,8 @@
 #!/usr/bin/python
 
 
-from git import reset_initialization
 from git import GitError
-
+from git import reset_initialization
 
 try:
     success_msg = reset_initialization()

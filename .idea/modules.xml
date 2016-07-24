@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/GitCorvusFlow.iml" filepath="$PROJECT_DIR$/.idea/GitCorvusFlow.iml" />
+      <module fileurl="file://F:/Zildyan/PythonGits/corvus-git-flow/.idea/corvus-git-flow.iml" filepath="F:/Zildyan/PythonGits/corvus-git-flow/.idea/corvus-git-flow.iml" />
     </modules>
   </component>
 </project>
