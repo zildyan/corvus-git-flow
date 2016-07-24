@@ -1,20 +1,18 @@
 #!/usr/bin/python
 
-
 from sys import argv, exit
-
-from git import GitError
-from git import approve
-from git import format_blanks
-from git import validate_flow_initialized
+from modules.git_core import GitError
+from modules.git_flow import redeem
+from modules.git_format import format_blanks
+from modules.git_validation import validate_flow_initialized
 
 
 def usage(): print("""
   Applies on RELEASE branch.
   
   Aborts if RELEASE branch doesn't have tags 
-  'waiting for approval' or 'waiting for overall approval',
-  otherwise it removes them.
+  'waiting for approval' otherwise it removes it
+  and deletes 'branch/released' tag from branch.
 """)
 
 
@@ -30,7 +28,7 @@ elif len(argv) == 2:
 
 try:
     validate_flow_initialized()
-    success_msg = approve()
+    success_msg = redeem()
     print(success_msg)
 
 except GitError as ex:

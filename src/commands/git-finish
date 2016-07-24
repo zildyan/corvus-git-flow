@@ -1,23 +1,18 @@
 #!/usr/bin/python
 
-
 from sys import argv, exit
-
-from git import GitError
-from git import dev_test
-from git import format_blanks
-from git import validate_branch
-from git import validate_flow_initialized
+from modules.git_core import GitError
+from modules.git_flow import finish
+from modules.git_format import format_blanks
+from modules.git_validation import validate_flow_initialized
 
 
 def usage(): print("""
   Applies on HOTFIX, BUGFIX and FEATURE branches.
   
-  Adds tag 'branch/testing' to the last commit of branch.
-  
-  Makes patch from tag 'branch/started' to 'branch/testing'
-  and applies it to DEVELOP branch if no test is in 
-  progress.
+  Adds tag 'branch/finished' on last commit of branch
+  and reverts active test commit on DEVELOP with sufix 
+  /success, if exists.
 """)
 
 
@@ -32,9 +27,8 @@ elif len(argv) == 2:
     exit(format_blanks('Invalid option'))
 
 try:
-    validate_branch()
     validate_flow_initialized()
-    success_msg = dev_test()
+    success_msg = finish()
     print(success_msg)
 
 except GitError as ex:

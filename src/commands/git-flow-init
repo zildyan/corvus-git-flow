@@ -1,11 +1,9 @@
 #!/usr/bin/python
 
-
 from sys import argv, exit
-
-from git import GitError
-from git import format_blanks
-from git import start_flow_initialization
+from modules.git_core import GitError
+from modules.git_flow import start_flow_initialization
+from modules.git_format import format_blanks
 
 
 def usage(): print("""

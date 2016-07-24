@@ -1,0 +1,40 @@
+#!/usr/bin/python
+
+
+from sys import argv, exit
+from modules.git_core import GitError
+from modules.git_flow import dev_test
+from modules.git_format import format_blanks
+from modules.git_validation import validate_flow_initialized
+from modules.git_validation import validate_branch
+
+
+def usage(): print("""
+  Applies on HOTFIX, BUGFIX and FEATURE branches.
+  
+  Adds tag 'branch/testing' to the last commit of branch.
+  
+  Makes patch from tag 'branch/started' to 'branch/testing'
+  and applies it to DEVELOP branch if no test is in 
+  progress.
+""")
+
+
+if len(argv) > 2:
+    exit(format_blanks('Invalid number of arguments.'))
+
+elif 'help' in argv:
+    usage()
+    exit()
+
+elif len(argv) == 2:
+    exit(format_blanks('Invalid option'))
+
+try:
+    print('Initialization of develop test...')
+    validate_flow_initialized()
+    success_msg = dev_test()
+    print(success_msg)
+
+except GitError as ex:
+    exit(ex.value)
