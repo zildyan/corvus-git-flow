@@ -36,7 +36,8 @@ elif len(argv) == 2:
 try:
     validate_branch()
     validate_flow_initialized()
-    release()
+    success_msg = release()
+    print(success_msg)
 
 except GitError as ex:
     exit(ex.value)

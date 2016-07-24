@@ -2,11 +2,9 @@
 
 from subprocess import Popen, PIPE
 
-
 WITH_RESPONSE = True
 WITH_FORCE = True
 SET_UPSTREAM = True
-CHECK_IF_EXISTS = True
 HOTFIX = 'HOTFIX'
 BUGFIX = 'BUGFIX'
 FEATURE = 'FEATURE'
@@ -24,7 +22,7 @@ ALL_APPROVAL = 'need_overall_approval'
 
 class GitError(Exception):
     def __init__(self, value):
-        self.value = format_blanks(value)
+        self.value = format_lines(value)
 
     def __str__(self):
         return repr(self.value)
@@ -38,7 +36,7 @@ def execute(command, return_response=False):
         if return_response is True:
             return format_rows(get_decoded_lines(response))
     else:
-        raise GitError(format_lines(get_decoded_lines(error)))
+        raise GitError(get_decoded_lines(error))
 
 
 def get_decoded_lines(output):
@@ -46,14 +44,15 @@ def get_decoded_lines(output):
 
 
 def format_lines(lines):
-    if len(lines) > 1:
+    if isinstance(lines, list):
         formatted_lines = []
         for line in lines:
-            formatted_lines.append(format_blanks(line))
+            line = str(line).strip()
+            if line != '':
+                formatted_lines.append(format_blanks(line))
         return format_rows(formatted_lines)
 
-    else:
-        return lines[0]
+    return format_blanks(lines)
 
 
 def format_rows(formatted_lines):
@@ -61,7 +60,8 @@ def format_rows(formatted_lines):
 
 
 def format_blanks(string_value):
-    return '  %s' % string_value
+    blanks = '  '
+    return blanks + string_value
 
 
 def start_flow_initialization(version):
@@ -85,11 +85,11 @@ def start_flow_initialization(version):
             checkout(root_branch)
 
         # delete_local_branch(root_branch)
-        msg = ['', 'Flow initialization successfully finished.',
-               '', 'Set default branch on remote repository to PROD,',
-               'and then manually delete %s' % root_branch]
+        msg = ['', '  Flow initialization successfully finished.',
+               '', '  Set default branch on remote repository to PROD,',
+               '  and then manually delete %s' % root_branch]
 
-        return format_lines(msg)
+        return format_rows(msg)
 
     except GitError as ex:
         raise ex
@@ -214,7 +214,7 @@ def validate_dev_test(branch_name):
     if not tag_exists(get_started_tag(branch_name)):
         raise GitError("Abort: Branch is missing 'started' tag.")
 
-    if not synchronised_with_remote:
+    if not synchronised_with_remote():
         raise GitError('Abort: Local branch is not synchronised with remote.')
 
     if is_testing_in_progress() is True:
@@ -329,20 +329,20 @@ def finish():
     tag_released = get_released_tag(current_branch)
 
     validate_finish(tag_finished, tag_released)
-    finish_test(tag_testing)
+    finish_test_if_exists(tag_testing)
     checkout(current_branch)
     add_tag(tag_finished)
-    return format_blanks('%s successfully finished.' % current_branch)
+    return format_blanks('Branch successfully finished.')
 
 
 def validate_finish(tag_finished, tag_released):
     if tag_exists(tag_released):
-        raise GitError('Abort: Branch is already released')
+        raise GitError('Abort: Branch is already released.')
     if tag_exists(tag_finished):
-        raise GitError('Abort: Branch is already finished')
+        raise GitError('Abort: Branch is already finished.')
 
 
-def finish_test(tag_testing):
+def finish_test_if_exists(tag_testing):
     if tag_exists(tag_testing):
         remove_tag(tag_testing)
         end_dev_test('success')
@@ -356,19 +356,20 @@ def release():
 
     validate_release(tag_finished, tag_released)
 
-    add_tag(tag_released)
     patch_name = format_patch_name(current_branch, 'release')
     create_patch(tag_started, tag_finished, patch_name)
 
     checkout(RELEASE)
     apply_patch(patch_name)
     delete_patch(patch_name)
-
     commit_all_changes('%s' % current_branch)
     add_tag(APPROVAL)
     push_to_origin(RELEASE)
+
     checkout(current_branch)
-    return format_blanks('%s branch released.' % current_branch)
+    remove_tag(tag_finished)
+    add_tag(tag_released)
+    return format_blanks('Branch successfully released.')
 
 
 def validate_release(tag_finished, tag_released):
@@ -403,13 +404,14 @@ def validate_approve():
 
 
 def redeem():
-    validate_redeem()
-    branch_name = get_last_commit_msg()
+    branch_name = get_last_commit_msg().rstrip()
+    validate_redeem(branch_name)
     checkout(branch_name)
     validate_branch()
 
-    remove_tag(get_finished_tag(branch_name), CHECK_IF_EXISTS)
-    remove_tag(get_released_tag(branch_name), CHECK_IF_EXISTS)
+    checkout(branch_name)
+    remove_tag(get_released_tag(branch_name))
+    add_tag(get_finished_tag(branch_name))
 
     checkout(RELEASE)
     remove_tag(APPROVAL)
@@ -418,11 +420,15 @@ def redeem():
     return format_blanks('%s needs to redeem itself.' % branch_name)
 
 
-def validate_redeem():
+def validate_redeem(branch_name):
     if get_current_branch() != RELEASE:
         raise GitError('Abort: Command redeem is allowed only on RELEASE branch')
-    if tag_exists(APPROVAL):
+
+    if tag_exists(APPROVAL) is False:
         raise GitError('Abort: There is nothing to redeem on RELEASE branch')
+
+    if tag_exists(get_released_tag(branch_name)) is False:
+        raise GitError('Fatal: Branch missing release tag.')
 
 
 def validate_branch():
@@ -444,15 +450,17 @@ def validate_branch():
 
 def remove(branch_name):
     validate_remove(branch_name)
-    remove_tag(get_finished_tag(branch_name), CHECK_IF_EXISTS)
-    remove_tag(get_released_tag(branch_name), CHECK_IF_EXISTS)
+    remove_tag(get_released_tag(branch_name))
 
     commit_sha = get_sha_of_commit_with_msg(branch_name)
     revert_commit(commit_sha)
-    commit('REMOVED/%s' % branch_name)
+    commit_all_changes('REMOVED/%s' % branch_name)
     add_tag(ALL_APPROVAL)
     push_to_origin(RELEASE)
-    return format_blanks('%s successfully removed from RELEASE' % branch_name)
+
+    checkout(branch_name)
+    add_tag(get_finished_tag(branch_name))
+    return format_blanks('Branch %s successfully removed from RELEASE' % branch_name)
 
 
 def validate_remove(branch_name):
@@ -462,6 +470,9 @@ def validate_remove(branch_name):
     if not get_last_commit_msg_with_substring(branch_name):
         raise GitError('Abort: There is no released feature, bugfix or hotfix named %s' % branch_name)
 
+    if tag_exists(get_released_tag(branch_name)) is False:
+        raise GitError('Fatal: Branch %s is missing release tag.' % branch_name)
+
     if tag_exists(APPROVAL):
         raise GitError('Abort: RELEASE branch is waiting for approval')
 
@@ -470,7 +481,7 @@ def validate_remove(branch_name):
 
 
 def get_sha_of_commit_with_msg(branch_name):
-    return execute('git log -1 --grep=%s --pretty=%h' % branch_name, WITH_RESPONSE)
+    return execute('git log -1 --pretty=%h --grep=' + branch_name, WITH_RESPONSE)
 
 
 def publish(version):
@@ -510,10 +521,6 @@ def validate_publish(current_branch):
         raise GitError('Abort: Command publish is allowed only on RELEASE and HOTFIX branches')
 
 
-def delete_local_branch(branch_name):
-    execute('git branch -D %s' % branch_name)
-
-
 def checkout(branch_name):
     execute('git checkout %s' % branch_name)
 
@@ -522,39 +529,25 @@ def get_current_branch():
     return execute('git rev-parse --abbrev-ref HEAD', WITH_RESPONSE)
 
 
-def push_branch(branch_name):
-    execute('git push --set-upstream origin %s' % branch_name)
-
-
-def delete_remote_branch(branch_name):
-    execute('git push origin --delete %s' % branch_name)
-
-
 def add_tag(tag_name):
     if tag_exists(tag_name):
         raise GitError('Abort: tag already exists')
     execute('git tag -a %s -m "%s"' % (tag_name, tag_name))
-
-
-def push_tag(tag_name):
-    if not tag_exists(tag_name):
-        raise GitError('Abort: Tag does not exists')
-    execute('git push tag %s' % tag_name)
+    execute('git push origin %s' % tag_name)
 
 
 def tag_exists(tag_name):
-    tags = execute('git tag', WITH_RESPONSE)
-    if tag_name in tags:
-        return True
-    return False
+    try:
+        execute('git describe --abbrev=0 --match=%s' % tag_name, WITH_RESPONSE)
+    except GitError:
+        return False
+
+    return True
 
 
-def remove_tag(tag_name, check=False):
-    if check is False or tag_exists(tag_name):
-        execute('git tag -d %s' % tag_name)
-        execute('git push --delete origin %s' % tag_name)
-    else:
-        raise GitError('%s tag do not exist.')
+def remove_tag(tag_name):
+    execute('git tag -d %s' % tag_name)
+    execute('git push --delete origin %s' % tag_name)
 
 
 def get_started_tag(branch_name):
@@ -627,8 +620,8 @@ def delete_patch(file_name):
     execute('rm %s' % file_name)
 
 
-def hard_reset_to_previous_commit(head_num=1):
-    execute('git reset --hard head~%s' % head_num)
+def hard_reset_to_previous_commit():
+    execute('git reset --hard head~1')
 
 
 def push_to_origin(branch_name, upstream=False):
@@ -637,6 +630,65 @@ def push_to_origin(branch_name, upstream=False):
         set_upstream = '--set-upstream'
 
     execute('git push -f origin %s %s' % (branch_name, set_upstream))
+
+
+def format_commit(commit_msg):
+    validate_branch()
+    current_branch = get_current_branch()
+    commit_msg = current_branch + '/' + commit_msg
+    commit(commit_msg)
+
+
+def in_version(version=None):
+    if version is None:
+        to_tag = 'head'
+        from_tag = execute('git describe --abbrev=0 --match=RELEASE/*', WITH_RESPONSE)
+    else:
+        to_tag = 'RELEASE/%s' % version
+        validate_version_tag(to_tag)
+        from_tag = execute('git describe --abbrev=0 --match=RELEASE/* %s~1' % to_tag, WITH_RESPONSE)
+
+    validate_version_tag(from_tag)
+    return get_version_upgrades(from_tag, to_tag)
+
+
+def validate_version_tag(tag_name):
+    if tag_exists(tag_name) is False:
+        raise GitError('Fatal: Version %s tag do not exists.' % tag_name)
+
+
+def get_version_upgrades(from_tag, to_tag):
+    all_upgrades = execute('git log --pretty=%B ' + to_tag + '...' + from_tag, WITH_RESPONSE)
+    all_upgrades_splitted = all_upgrades.splitlines()
+
+    if all_upgrades is None or len(all_upgrades_splitted) == 0:
+        return format_blanks('None of upgrades found.')
+
+    removed_upgrades = get_removed_upgrades(all_upgrades_splitted)
+
+    if len(removed_upgrades) != 0:
+        upgrades = get_upgrades(all_upgrades_splitted, removed_upgrades)
+    else:
+        upgrades = all_upgrades_splitted
+
+    return '\n' + format_lines(upgrades)
+
+
+def get_removed_upgrades(all_upgrades_splitted):
+    removed_upgrades = []
+    for upgrade in all_upgrades_splitted:
+        if 'REMOVED' in upgrade:
+            removed_upgrades.append(upgrade)
+            removed_upgrades.append(upgrade.split('REMOVED/')[1])
+    return removed_upgrades
+
+
+def get_upgrades(all_upgrades_splitted, removed_upgrades):
+    upgrades = []
+    for upgrade in all_upgrades_splitted:
+        if upgrade not in removed_upgrades:
+            upgrades.append(upgrade)
+    return upgrades
 
 
 def reset_initialization():
